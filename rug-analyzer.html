@@ -1164,17 +1164,35 @@ async function postBackend(action, payload) {
   }
 }
 async function callBackend(action, payload) {
-  try {
-    const res = await fetch(BACKEND, {
-      method: 'POST',
-      redirect: 'follow',
-      body: JSON.stringify({ action, ...payload })
+  return new Promise((resolve, reject) => {
+    var cbName = '_cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    var timeout = setTimeout(function() {
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve({ error: 'Backend timeout' });
+    }, 120000);
+    window[cbName] = function(data) {
+      clearTimeout(timeout);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve(data);
+    };
+    var params = new URLSearchParams({
+      action: action,
+      data: JSON.stringify(payload),
+      callback: cbName
     });
-    return await res.json();
-  } catch(err) {
-    console.warn('Backend call failed:', action, err.message);
-    return { error: err.message };
-  }
+    var script = document.createElement('script');
+    script.src = BACKEND + '?' + params.toString();
+    script.onerror = function() {
+      clearTimeout(timeout);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      resolve({ error: 'Network error' });
+    };
+    document.head.appendChild(script);
+  });
+}
 }
 
 // READS: direct Google Sheets gviz JSON API — no CORS issues, always works
